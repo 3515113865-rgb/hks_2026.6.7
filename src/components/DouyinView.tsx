@@ -66,30 +66,14 @@ export default function DouyinView({ onNavigate, customVideoUrl, setCustomVideoU
     >
       {/* Immersive Short Video Backdrop */}
       <div className="absolute inset-0 z-0">
-        {customVideoUrl ? (
-          <video
-            src={customVideoUrl}
-            className="w-full h-full object-cover filter brightness-[0.8] contrast-[1.10]"
-            autoPlay
-            loop
-            muted
-            playsInline
-          />
-        ) : (
-          <motion.img
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQugdFV9l_YPO8h2dKB6zrllrMvONMnC5DOG1Q8rk-lJ53wwuGUndu9iVJVWL_CEAooPS3DxvtRnBVebywRhmOixvH_m49q8PWPnBYlkdnuHuTp3MMKyK_8huRjumQlx4-HjGSLid3AWgKOSaX_EBAuw-UqCkLxvLcfa4YNjuFoxFAC5NOzr6HezpLaV8EfLcugXrYszf6K9dOJkZrGk0u8IdUl2I9YJDPIZbLx80ucHRJAQiXKDbPfOsxTc_FXMjcrWCdXjAlbFU"
-            className="w-full h-full object-cover filter brightness-[0.8] contrast-[1.10]"
-            alt="Professional Badminton Athlete Smash video freeze"
-            animate={{
-              scale: [1, 1.04, 1],
-            }}
-            transition={{
-              duration: 20,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-          />
-        )}
+        <video
+          src={customVideoUrl || "/111.mp4"}
+          className="w-full h-full object-cover filter brightness-[0.8] contrast-[1.10]"
+          autoPlay
+          loop
+          muted
+          playsInline
+        />
         {/* Soft immersive dark gradients on top/bottom fields */}
         <div className="absolute top-0 inset-x-0 h-40 bg-gradient-to-b from-black/85 via-black/30 to-transparent pointer-events-none" />
         <div className="absolute bottom-0 inset-x-0 h-82 bg-gradient-to-t from-black via-black/45 to-transparent pointer-events-none" />

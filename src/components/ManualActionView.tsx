@@ -109,93 +109,50 @@ export default function ManualActionView({ onNavigate, onShowNotification }: Man
 
       {/* Hero Visual Block */}
       <section className="relative rounded-2xl overflow-hidden aspect-[4/3] bg-surface-container-lowest border border-outline-variant/20 mb-8 group shadow-2xl flex flex-col">
-        <div className="manual-media-frame">
+        <div className="manual-media-frame flex-grow relative">
           {annotatedVideoUrl && !videoError ? (
-            <>
-              <div className="absolute top-0 inset-x-0 p-3 bg-gradient-to-b from-black/80 to-transparent z-20 pointer-events-none">
-                <h3 className="text-[#c3f400] font-display font-black text-sm uppercase tracking-wide flex items-center gap-2">
-                  <Sparkles size={14} /> AI 姿态识别视频
-                </h3>
-                <p className="text-white/70 text-[10px] font-mono mt-0.5">YOLO-Pose 已标注身体关键点与动作轨迹</p>
-              </div>
-              <video
-                key={annotatedVideoUrl}
-                src={annotatedVideoUrl}
-                className="manual-media z-10 relative"
-                controls
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="auto"
-                onLoadedData={() => console.log('annotated video loaded:', annotatedVideoUrl)}
-                onError={(e) => {
-                  console.error('annotated video error:', e);
-                  setVideoError(true);
-                }}
-              />
-            </>
+            <video
+              key={annotatedVideoUrl}
+              src={annotatedVideoUrl}
+              className="manual-media w-full h-full object-contain bg-black"
+              controls
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="auto"
+            />
           ) : keyframeUrl ? (
             <img
               src={keyframeUrl}
-              className="manual-media opacity-80"
-              alt="YOLO 关键帧"
-              referrerPolicy="no-referrer"
+              className="manual-media w-full h-full object-contain bg-black"
+              alt="AI 分析结果"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-black/80 text-white/50 text-sm font-mono z-10 relative">
-              暂无分析视频，已显示默认动作说明
+            <div className="w-full h-full flex items-center justify-center bg-[#1c1b1b] text-white/30 text-xs font-mono">
+              等待上传分析视频...
             </div>
           )}
         </div>
 
-        {/* Biomechanical tracked lines */}
-        <div className="absolute inset-0 pointer-events-none z-10">
-          {analysisData?.pose_keypoints ? (
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 640 480" preserveAspectRatio="xMidYMid slice">
-              {analysisData.pose_keypoints.map((kp: any, idx: number) => (
-                <circle 
-                  key={idx}
-                  cx={kp.x} 
-                  cy={kp.y} 
-                  r="4" 
-                  fill="#c3f400" 
-                  className="animate-pulse shadow-[0_0_8px_#c3f400]" 
-                />
-              ))}
-            </svg>
-          ) : (
-            <>
-              {/* Neon track dots */}
-              <div className="skeletal-dot" style={{ top: '25%', left: '48%' }} />
-              <div className="skeletal-dot" style={{ top: '35%', left: '44%' }} />
-              <div className="skeletal-dot" style={{ top: '35%', left: '52%' }} />
-              <div className="skeletal-dot" style={{ top: '20%', left: '62%' }} />
-              <div className="skeletal-dot" style={{ top: '55%', left: '48%' }} />
-              <div className="skeletal-dot" style={{ top: '75%', left: '40%' }} />
-              <div className="skeletal-dot" style={{ top: '85%', left: '55%' }} />
-
-              {/* Connected track bones */}
-              <div className="skeletal-line" style={{ top: '35%', left: '44%', width: '10%' }} />
-              <div className="skeletal-line" style={{ top: '35%', left: '52%', width: '15%', transform: 'rotate(-35deg)' }} />
-            </>
-          )}
-
-          <div className="absolute top-4 left-4 glass-card px-3.5 py-1.5 rounded-full flex items-center gap-2 border border-[#c3f400]/20">
-            <span className="w-1.5 h-1.5 bg-[#c3f400] rounded-full animate-pulse-glow shadow-[0_0_8px_#c3f400]" />
-            <span className="font-mono text-[9px] uppercase tracking-widest text-[#c3f400]">LIVE AI TRACKING: ACTIVE</span>
-          </div>
-
-          <div className="absolute top-[48%] left-[55%] border-l border-t border-secondary-container/40 w-10 h-10 rounded-tl-full">
-            <span className="absolute -top-5 -left-1 font-mono text-[10px] text-secondary-container">164°</span>
+        {/* Status Overlay - Keeping it minimal and consistent with entrance style */}
+        <div className="absolute top-4 left-4 z-20">
+          <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+            <span className="w-1.5 h-1.5 bg-[#CCFF00] rounded-full animate-pulse" />
+            <span className="font-mono text-[9px] text-[#CCFF00] font-black uppercase tracking-widest">
+              AI Analysis Result
+            </span>
           </div>
         </div>
 
-        {/* Categories labels */}
-        <div className="absolute bottom-0 left-0 w-full p-5 bg-gradient-to-t from-black to-transparent flex flex-wrap gap-2 z-20">
-          <span className="bg-[#c3f400] text-[#161e00] px-3 py-1 rounded-full font-mono text-[10px] uppercase font-bold">OFFENSIVE</span>
-          <span className="bg-[#00e3fd]/20 text-[#bdf4ff] border border-[#00e3fd]/30 px-3 py-1 rounded-full font-mono text-[10px] uppercase font-semibold">ADVANCED</span>
-          <span className="bg-[#353534]/80 text-[#e5e2e1] px-3 py-1 rounded-full font-mono text-[10px] uppercase">SCORING MOVE</span>
+        {/* Action Type Labels */}
+        <div className="absolute bottom-4 left-4 flex gap-2 z-20">
+          <span className="bg-[#CCFF00] text-black px-2 py-0.5 rounded-sm font-mono text-[9px] font-bold uppercase">
+            {actionName === "跳杀" ? "Offensive" : "Active"}
+          </span>
+          <span className="bg-white/10 backdrop-blur-md text-white/70 px-2 py-0.5 rounded-sm font-mono text-[9px] font-bold uppercase border border-white/10">
+            AI Tracked
+          </span>
         </div>
       </section>
 

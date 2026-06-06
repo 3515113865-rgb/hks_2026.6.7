@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronRight, Camera, RefreshCw, X, Lightbulb, Zap, Sparkles, Wand2, ShieldAlert, Loader2, Upload } from 'lucide-react';
+import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 import { ScreenPath } from '../types';
 
 interface ShootCameraGuideViewProps {
@@ -8,10 +9,24 @@ interface ShootCameraGuideViewProps {
   onShowNotification?: (msg: string) => void;
 }
 
+const connections = [
+  [11, 13], [13, 15],
+  [12, 14], [14, 16],
+  [11, 12],
+  [11, 23], [12, 24],
+  [23, 24],
+  [23, 25], [25, 27],
+  [24, 26], [26, 28]
+];
+
 export default function ShootCameraGuideView({ onNavigate, onShowNotification }: ShootCameraGuideViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const poseLandmarkerRef = useRef<PoseLandmarker | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const lastVideoTimeRef = useRef(-1);
   const chunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -22,10 +37,40 @@ export default function ShootCameraGuideView({ onNavigate, onShowNotification }:
   const [isProcessing, setIsProcessing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState('');
   const [cameraError, setError] = useState<string | null>(null);
+  const [realtimeTip, setRealtimeTip] = useState("正在初始化 AI 系统...");
 
-  // Initialize Camera
+  // Initialize MediaPipe and Camera
   useEffect(() => {
-    async function startCamera() {
+    let mounted = true;
+
+    const initPose = async () => {
+      try {
+        setRealtimeTip("正在加载 AI 模型...");
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+        );
+
+        const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+            delegate: "GPU"
+          },
+          runningMode: "VIDEO",
+          numPoses: 1
+        });
+
+        if (!mounted) return;
+
+        poseLandmarkerRef.current = poseLandmarker;
+        setRealtimeTip("正在开启摄像头...");
+        startCamera();
+      } catch (err) {
+        console.error("AI Init error:", err);
+        setError("无法初始化 AI 系统，请尝试刷新页面。");
+      }
+    };
+
+    const startCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -35,24 +80,133 @@ export default function ShootCameraGuideView({ onNavigate, onShowNotification }:
           },
           audio: false
         });
+        
+        if (!mounted) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play();
+            predictWebcam();
+          };
         }
       } catch (err) {
         console.error("Camera access error:", err);
         setError("无法打开摄像头，请允许浏览器访问摄像头，或使用上传视频功能。");
       }
-    }
+    };
 
-    startCamera();
+    initPose();
 
     return () => {
+      mounted = false;
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      poseLandmarkerRef.current?.close();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
+
+  const predictWebcam = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const poseLandmarker = poseLandmarkerRef.current;
+
+    if (!video || !canvas || !poseLandmarker) {
+      animationRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+
+    if (video.readyState >= 2 && video.currentTime !== lastVideoTimeRef.current) {
+      lastVideoTimeRef.current = video.currentTime;
+
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.clearRect(0, 0, width, height);
+        const result = poseLandmarker.detectForVideo(video, performance.now());
+
+        if (result.landmarks && result.landmarks.length > 0) {
+          drawPose(ctx, result.landmarks[0], width, height);
+          updateRealtimeStatus(result.landmarks[0]);
+        } else {
+          setRealtimeTip("正在寻找人体...");
+        }
+      }
+    }
+
+    animationRef.current = requestAnimationFrame(predictWebcam);
+  };
+
+  const drawPose = (ctx: CanvasRenderingContext2D, landmarks: any[], width: number, height: number) => {
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    
+    // Draw connections
+    ctx.strokeStyle = "rgba(34, 211, 238, 0.9)";
+    connections.forEach(([start, end]) => {
+      const a = landmarks[start];
+      const b = landmarks[end];
+
+      if (!a || !b) return;
+      if ((a.visibility ?? 1) < 0.45 || (b.visibility ?? 1) < 0.45) return;
+
+      ctx.beginPath();
+      ctx.moveTo(a.x * width, a.y * height);
+      ctx.lineTo(b.x * width, b.y * height);
+      ctx.stroke();
+    });
+
+    // Draw points
+    landmarks.forEach((point, index) => {
+      if ((point.visibility ?? 1) < 0.45) return;
+      // Skip face points except nose for cleaner UI
+      if (index > 0 && index < 11) return;
+
+      const x = point.x * width;
+      const y = point.y * height;
+
+      ctx.beginPath();
+      ctx.arc(x, y, (index === 15 || index === 16) ? 7 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = (index === 15 || index === 16) ? "#d6ff00" : "#34f58b";
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = (index === 15 || index === 16) ? "#d6ff00" : "#34f58b";
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    });
+  };
+
+  const updateRealtimeStatus = (landmarks: any[]) => {
+    const leftWrist = landmarks[15];
+    const rightWrist = landmarks[16];
+    const nose = landmarks[0];
+    const leftAnkle = landmarks[27];
+    const rightAnkle = landmarks[28];
+
+    const wristsVisible = (leftWrist?.visibility ?? 0) > 0.45 || (rightWrist?.visibility ?? 0) > 0.45;
+    const fullBodyVisible = (nose?.visibility ?? 0) > 0.45 && (leftAnkle?.visibility ?? 0) > 0.35 && (rightAnkle?.visibility ?? 0) > 0.35;
+
+    if (!fullBodyVisible) {
+      setRealtimeTip("请后退一点，保持全身入镜");
+    } else if (!wristsVisible) {
+      setRealtimeTip("请让持拍手进入画面");
+    } else {
+      setRealtimeTip("身体已入框，可以开始录制");
+    }
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -174,33 +328,39 @@ export default function ShootCameraGuideView({ onNavigate, onShowNotification }:
         </div>
       </header>
 
-      {/* Camera Viewport */}
+      {/* Camera Stage */}
       <div className="absolute inset-0 z-0 bg-neutral-900">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover opacity-80"
-        />
-        
-        {/* Dash Scan Line */}
-        <div className="camera-overlay-line z-10" />
+        <div className="camera-stage w-full h-full">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="camera-preview"
+          />
+          <canvas
+            ref={canvasRef}
+            className="pose-canvas"
+          />
+          
+          {/* Dash Scan Line */}
+          <div className="camera-overlay-line z-10" />
 
-        {/* Grid */}
-        <div className="absolute inset-0 border-[1px] border-white/5 pointer-events-none grid grid-cols-4">
-          <div className="border-r border-white/5" />
-          <div className="border-r border-white/5" />
-          <div className="border-r border-white/5" />
+          {/* Grid */}
+          <div className="absolute inset-0 border-[1px] border-white/5 pointer-events-none grid grid-cols-4">
+            <div className="border-r border-white/5" />
+            <div className="border-r border-white/5" />
+            <div className="border-r border-white/5" />
+          </div>
         </div>
       </div>
 
       {/* Silhouette Overlay */}
-      <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+      <div className="human-guide-frame flex items-center justify-center">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="relative w-[300px] h-[520px] border-2 border-dashed border-white/20 rounded-[40px] flex items-center justify-center"
+          className="relative w-[300px] h-[520px] border-2 border-dashed border-white/10 rounded-[40px] flex items-center justify-center"
         >
           {/* Head */}
           <div className="absolute top-12 w-20 h-20 border-2 border-dashed border-[#00e3fd]/40 rounded-full" />
@@ -268,20 +428,22 @@ export default function ShootCameraGuideView({ onNavigate, onShowNotification }:
         </div>
       )}
 
-      {/* Status Labels */}
-      <div className="absolute top-20 left-6 z-20 flex flex-col gap-2">
+      {/* AI Status Labels */}
+      <div className="ai-status-chip">
         <div className="flex items-center gap-2 bg-black/50 border border-[#CCFF00]/25 px-3 py-1.5 rounded-full backdrop-blur-md">
           <span className="w-1.5 h-1.5 rounded-full bg-[#CCFF00] animate-pulse" />
           <span className="font-mono text-[9px] text-[#CCFF00] font-black uppercase">
-            {isRecording ? `正在录制 8s 动作` : "正在检测入框状态"}
+            {isRecording ? `正在录制 8s 动作` : realtimeTip}
           </span>
         </div>
-        <div className="flex items-center gap-2 bg-black/40 border border-white/5 px-3 py-1.5 rounded-full backdrop-blur-md opacity-60">
-          <span className="w-1.5 h-1.5 rounded-full bg-white/40" />
-          <span className="font-mono text-[9px] text-white/70 uppercase">
-            请保持全身入镜
-          </span>
-        </div>
+        {!isRecording && (
+          <div className="flex items-center gap-2 bg-black/40 border border-white/5 px-3 py-1.5 rounded-full backdrop-blur-md opacity-60">
+            <span className="w-1.5 h-1.5 rounded-full bg-white/40" />
+            <span className="font-mono text-[9px] text-white/70 uppercase">
+              请保持全身入镜
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Bottom Control Bar */}
