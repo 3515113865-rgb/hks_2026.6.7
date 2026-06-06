@@ -1,0 +1,6 @@
+{
+  "name": "羽人羽毛球 AI",
+  "description": "看见一个羽毛球瞬间，问一句，生成你的专属说明书。专注于羽毛球动作分析、装备适配及比赛战术指导的多功能移动智能终端。",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
