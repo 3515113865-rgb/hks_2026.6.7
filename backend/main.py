@@ -38,8 +38,13 @@ async def analyze_video(
     mode: str = Form("action"),
     question: str = Form("")
 ):
-    ext = video.filename.split(".")[-1] if "." in video.filename else "mp4"
-    filename = f"{uuid.uuid4().hex}.{ext}"
+    # Use the actual extension from the uploaded file
+    filename_orig = video.filename or "video.webm"
+    ext = os.path.splitext(filename_orig)[1] or ".mp4"
+    if ext == ".blob": # common for web recordings
+        ext = ".webm"
+        
+    filename = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(uploads_dir, filename)
     
     with open(filepath, "wb") as buffer:

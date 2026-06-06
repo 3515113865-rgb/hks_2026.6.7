@@ -53,7 +53,7 @@ export default function ShootEntranceView({ onNavigate, onShowNotification }: Sh
       const statusTimer3 = setTimeout(() => setAnalysisStatus('正在生成姿态标注视频...'), 5000);
       const statusTimer4 = setTimeout(() => setAnalysisStatus('正在生成动作说明书...'), 8000);
 
-      const res = await fetch('http://127.0.0.1:8000/api/analyze-video', {
+      const res = await fetch('http://localhost:8000/api/analyze-video', {
         method: 'POST',
         body: formData
       });

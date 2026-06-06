@@ -23,9 +23,14 @@ export default function ManualActionView({ onNavigate, onShowNotification }: Man
 
   useEffect(() => {
     try {
-      const data = localStorage.getItem('analysisResult');
-      if (data) {
-        setAnalysisData(JSON.parse(data));
+      const rawData = localStorage.getItem('analysisResult');
+      console.log('analysisResult raw:', rawData);
+      if (rawData) {
+        const parsed = JSON.parse(rawData);
+        console.log('analysisResult parsed:', parsed);
+        console.log('annotated_video:', parsed?.annotated_video);
+        console.log('keyframe_image:', parsed?.keyframe_image);
+        setAnalysisData(parsed);
       }
     } catch (e) {
       console.error('Failed to parse analysis result', e);
@@ -43,17 +48,13 @@ export default function ManualActionView({ onNavigate, onShowNotification }: Man
   const actionName = analysisData?.action_guess || "羽毛球击球动作";
   const summary = analysisData?.analysis?.summary || analysisData?.manual?.summary || "羽毛球运动中最具威力的进攻技术，通过起跳增加击球高度和力量，使球产生极速下压轨迹。";
 
-  const problems = Array.isArray(analysisData?.analysis?.problems) && analysisData.analysis.problems.length > 0
-    ? analysisData.analysis.problems
-    : ["击球点偏低 (Low Hit Point)", "仅靠手臂硬拽发力 (Arm-only Power)"];
+  const problems = analysisData?.manual?.errors || analysisData?.analysis?.problems || ["击球点偏低 (Low Hit Point)", "仅靠手臂硬拽发力 (Arm-only Power)"];
 
   const strengths = Array.isArray(analysisData?.analysis?.strengths) 
     ? analysisData.analysis.strengths 
     : [];
 
-  const training = Array.isArray(analysisData?.analysis?.training) && analysisData.analysis.training.length > 0
-    ? analysisData.analysis.training
-    : ["高位绕肩抗阻训练 (纠正肘关节引拍高度)", "击球点前置挥拍基础课 (改善向前惯量爆发阻力)"];
+  const training = analysisData?.manual?.training || analysisData?.analysis?.training || ["高位绕肩抗阻训练 (纠正肘关节引拍高度)", "击球点前置挥拍基础课 (改善向前惯量爆发阻力)"];
 
   const frameObservations = Array.isArray(analysisData?.analysis?.frame_observations) 
     ? analysisData.analysis.frame_observations 
@@ -61,8 +62,12 @@ export default function ManualActionView({ onNavigate, onShowNotification }: Man
 
   // Safely extract URLs
   const API_BASE = "http://127.0.0.1:8000";
-  const annotatedVideoUrl = analysisData?.annotated_video ? `${API_BASE}${analysisData.annotated_video}` : "";
-  const keyframeUrl = analysisData?.keyframe_image ? `${API_BASE}${analysisData.keyframe_image}` : "";
+  const annotatedVideoUrl = analysisData?.annotated_video ? `${API_BASE}${analysisData.annotated_video}?t=${Date.now()}` : null;
+  const keyframeUrl = analysisData?.keyframe_image ? `${API_BASE}${analysisData.keyframe_image}?t=${Date.now()}` : null;
+
+  if (annotatedVideoUrl) {
+    console.log('annotatedVideoUrl:', annotatedVideoUrl);
+  }
 
   const handleAddToGraph = () => {
     if (addedToGraph) return;
@@ -104,60 +109,61 @@ export default function ManualActionView({ onNavigate, onShowNotification }: Man
 
       {/* Hero Visual Block */}
       <section className="relative rounded-2xl overflow-hidden aspect-[4/3] bg-surface-container-lowest border border-outline-variant/20 mb-8 group shadow-2xl flex flex-col">
-        {annotatedVideoUrl && !videoError ? (
-          <>
-            <div className="absolute top-0 inset-x-0 p-3 bg-gradient-to-b from-black/80 to-transparent z-20 pointer-events-none">
-              <h3 className="text-[#c3f400] font-display font-black text-sm uppercase tracking-wide flex items-center gap-2">
-                <Sparkles size={14} /> AI 姿态识别视频
-              </h3>
-              <p className="text-white/70 text-[10px] font-mono mt-0.5">YOLO-Pose 已标注身体关键点与动作轨迹</p>
-            </div>
-            <video
-              src={annotatedVideoUrl}
-              controls
-              playsInline
-              preload="metadata"
-              onError={(e) => {
-                console.error('分析视频加载失败:', e);
-                setVideoError(true);
-              }}
-              className="w-full h-full object-cover analysis-video z-10 relative"
-              style={{
-                background: '#000',
-                border: '1px solid rgba(52, 245, 139, 0.28)',
-                boxShadow: '0 0 24px rgba(52, 245, 139, 0.16)'
-              }}
+        <div className="manual-media-frame">
+          {annotatedVideoUrl && !videoError ? (
+            <>
+              <div className="absolute top-0 inset-x-0 p-3 bg-gradient-to-b from-black/80 to-transparent z-20 pointer-events-none">
+                <h3 className="text-[#c3f400] font-display font-black text-sm uppercase tracking-wide flex items-center gap-2">
+                  <Sparkles size={14} /> AI 姿态识别视频
+                </h3>
+                <p className="text-white/70 text-[10px] font-mono mt-0.5">YOLO-Pose 已标注身体关键点与动作轨迹</p>
+              </div>
+              <video
+                key={annotatedVideoUrl}
+                src={annotatedVideoUrl}
+                className="manual-media z-10 relative"
+                controls
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="auto"
+                onLoadedData={() => console.log('annotated video loaded:', annotatedVideoUrl)}
+                onError={(e) => {
+                  console.error('annotated video error:', e);
+                  setVideoError(true);
+                }}
+              />
+            </>
+          ) : keyframeUrl ? (
+            <img
+              src={keyframeUrl}
+              className="manual-media opacity-80"
+              alt="YOLO 关键帧"
+              referrerPolicy="no-referrer"
             />
-          </>
-        ) : keyframeUrl ? (
-          <img
-            className="w-full h-full object-cover opacity-80"
-            referrerPolicy="no-referrer"
-            alt="AI 姿态识别关键帧"
-            src={keyframeUrl}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-black/80 text-white/50 text-sm font-mono z-10 relative">
-            暂无分析视频，已显示默认动作说明
-          </div>
-        )}
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-black/80 text-white/50 text-sm font-mono z-10 relative">
+              暂无分析视频，已显示默认动作说明
+            </div>
+          )}
+        </div>
 
         {/* Biomechanical tracked lines */}
         <div className="absolute inset-0 pointer-events-none z-10">
           {analysisData?.pose_keypoints ? (
-            analysisData.pose_keypoints.map((kp: any, idx: number) => {
-              // Estimate the scaling. YOLO outputs are usually in original image coordinates.
-              // Assuming original image size is roughly 640x640 or something similar,
-              // but since we don't have the exact image width/height in frontend easily,
-              // we can just render the points if we have a way to normalize them, 
-              // or since the image is object-cover, it might be tricky to align perfectly without original dimensions.
-              // We will just try to render the points if they are normalized. 
-              // Wait, YOLO outputs absolute coordinates. Let's just use the image drawn by backend which already has lines!
-              // Ah, backend `result.plot()` already draws the keypoints on the image.
-              // The user just said "如果有 pose_keypoints，请在关键帧图片上叠加骨骼点".
-              // But backend already did it in the image. So we can just show the neon dots as a decorative overlay.
-              return null;
-            })
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 640 480" preserveAspectRatio="xMidYMid slice">
+              {analysisData.pose_keypoints.map((kp: any, idx: number) => (
+                <circle 
+                  key={idx}
+                  cx={kp.x} 
+                  cy={kp.y} 
+                  r="4" 
+                  fill="#c3f400" 
+                  className="animate-pulse shadow-[0_0_8px_#c3f400]" 
+                />
+              ))}
+            </svg>
           ) : (
             <>
               {/* Neon track dots */}
@@ -186,7 +192,7 @@ export default function ManualActionView({ onNavigate, onShowNotification }: Man
         </div>
 
         {/* Categories labels */}
-        <div className="absolute bottom-0 left-0 w-full p-5 bg-gradient-to-t from-black to-transparent flex flex-wrap gap-2">
+        <div className="absolute bottom-0 left-0 w-full p-5 bg-gradient-to-t from-black to-transparent flex flex-wrap gap-2 z-20">
           <span className="bg-[#c3f400] text-[#161e00] px-3 py-1 rounded-full font-mono text-[10px] uppercase font-bold">OFFENSIVE</span>
           <span className="bg-[#00e3fd]/20 text-[#bdf4ff] border border-[#00e3fd]/30 px-3 py-1 rounded-full font-mono text-[10px] uppercase font-semibold">ADVANCED</span>
           <span className="bg-[#353534]/80 text-[#e5e2e1] px-3 py-1 rounded-full font-mono text-[10px] uppercase">SCORING MOVE</span>

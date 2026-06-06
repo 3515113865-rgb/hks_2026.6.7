@@ -58,17 +58,12 @@ def create_annotated_pose_video(video_path: str, action_guess: str) -> str:
         if not ret:
             break
 
-        # Process every 2 frames to speed up
-        if frame_index % 2 == 0:
-            results = model.predict(frame, verbose=False)
-            if results and len(results) > 0:
-                annotated_frame = results[0].plot()
-                last_annotated = annotated_frame
-            else:
-                annotated_frame = frame
-                last_annotated = frame
+        # Process every frame for smooth output
+        results = model.predict(frame, verbose=False)
+        if results and len(results) > 0:
+            annotated_frame = results[0].plot()
         else:
-            annotated_frame = last_annotated if last_annotated is not None else frame
+            annotated_frame = frame
 
         # Ensure frame size matches writer exactly
         annotated_frame = cv2.resize(annotated_frame, (width, height))
@@ -132,7 +127,8 @@ def create_annotated_pose_video(video_path: str, action_guess: str) -> str:
         print(f"exists: True")
         print(f"size: {size}")
         if size == 0:
-            return ""
+            print("Warning: Generated annotated video is 0 bytes.")
+            # Do not return empty string here, let it try to play in frontend or fallback gracefully
             
     return f"/outputs/{output_name}"
 
@@ -140,7 +136,20 @@ def analyze_video_pose(video_path: str, mode: str = "action", question: str = ""
     """
     输入视频路径，返回人体姿态识别和动作分析结果。
     """
-    cap = cv2.VideoCapture(video_path)
+    # Pre-process: if webm, convert to mp4 for better OpenCV compatibility
+    processed_path = video_path
+    if video_path.endswith(".webm") and shutil.which("ffmpeg"):
+        temp_mp4 = video_path.replace(".webm", "_converted.mp4")
+        try:
+            subprocess.run([
+                "ffmpeg", "-y", "-i", video_path, 
+                "-vcodec", "libx264", "-pix_fmt", "yuv420p", temp_mp4
+            ], check=True, capture_output=True)
+            processed_path = temp_mp4
+        except Exception as e:
+            print(f"WebM conversion failed, trying raw: {e}")
+
+    cap = cv2.VideoCapture(processed_path)
     if not cap.isOpened():
         return {"success": False, "error": "Cannot open video"}
 
